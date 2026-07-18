@@ -7,17 +7,34 @@ const Grab = () => {
   const [grabbing, setGrabbing] = useState(false);
   const [grabbedOrder, setGrabbedOrder] = useState(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [availableCount, setAvailableCount] = useState(0);
   const [stats, setStats] = useState({
     completedToday: 0,
     unfinishedToday: 0,
     commissionToday: 0,
   });
 
+  // Fetch count of matching tasks available to be grabbed
+  const fetchAvailableCount = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/grab/status', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setAvailableCount(data.availableCount || 0);
+      }
+    } catch (error) {
+      console.error('Error fetching available tasks status:', error);
+    }
+  };
+
   // Fetch grabs history on mount to calculate stats
   const fetchGrabStats = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/grabs', {
+      const response = await fetch('/api/grab', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
@@ -47,11 +64,13 @@ const Grab = () => {
   useEffect(() => {
     refreshUser();
     fetchGrabStats();
+    fetchAvailableCount();
     
-    // Auto-poll stats and user balance every 4 seconds to catch background auto-settlements
+    // Auto-poll stats and user balance every 4 seconds
     const interval = setInterval(() => {
       refreshUser();
       fetchGrabStats();
+      fetchAvailableCount();
     }, 4000);
 
     return () => clearInterval(interval);
@@ -123,11 +142,12 @@ const Grab = () => {
       if (!response.ok) {
         addToast(data.error || 'Order submission failed', 'error');
       } else {
-        addToast('Order purchased! Funds frozen. Settling in 30 seconds.');
+        addToast('Order purchased! Waiting for Admin approval.');
         setShowConfirmModal(false);
         setGrabbedOrder(null);
         refreshUser();
         fetchGrabStats();
+        fetchAvailableCount();
       }
     } catch (error) {
       addToast('Error submitting order', 'error');
@@ -160,6 +180,34 @@ const Grab = () => {
         </div>
       </div>
 
+      {/* Available matched tasks queue banner */}
+      <div className="glass-card" style={{
+        padding: '16px',
+        marginBottom: '16px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        border: availableCount > 0 ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid var(--border)',
+        background: availableCount > 0 ? 'rgba(16, 185, 129, 0.05)' : 'rgba(255,255,255,0.02)'
+      }}>
+        <div>
+          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Tasks Available to Grab</div>
+          <div style={{ fontSize: '20px', fontWeight: '800', color: availableCount > 0 ? 'var(--success)' : 'white', marginTop: '4px' }}>
+            {availableCount} {availableCount === 1 ? 'Task' : 'Tasks'}
+          </div>
+        </div>
+        <div style={{
+          background: availableCount > 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255,255,255,0.05)',
+          padding: '6px 12px',
+          borderRadius: '20px',
+          fontSize: '11px',
+          fontWeight: '700',
+          color: availableCount > 0 ? 'var(--success)' : 'var(--text-secondary)'
+        }}>
+          {availableCount > 0 ? 'Queue Ready' : 'Empty Queue'}
+        </div>
+      </div>
+
       {/* Commission Rules Info card */}
       <div style={{
         background: 'linear-gradient(135deg, #1e3a8a 0%, #0284c7 100%)',
@@ -173,7 +221,7 @@ const Grab = () => {
           <span>Commission Rate: 20.0%</span>
         </div>
         <p style={{ fontSize: '11px', color: '#e0f2fe', margin: 0, opacity: 0.9, lineHeight: '1.4' }}>
-          Grabbing matched orders deducts funds from your available balance and freezes it. Commission + Principal is returned automatically in 30 seconds.
+          Grabbing matched orders deducts funds from your available balance and freezes it. Commission + Principal is returned to your balance upon Admin approval.
         </p>
       </div>
 

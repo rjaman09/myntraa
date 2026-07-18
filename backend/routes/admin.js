@@ -258,71 +258,85 @@ router.delete('/orders/:id', authenticateAdmin, async (req, res) => {
   }
 });
 
-// 13. Settle Grab Manually (Admin Override)
+// 13. Get All User Grabs
+router.get('/grabs', authenticateAdmin, async (req, res) => {
+  try {
+    const grabs = await db.getUserGrabs();
+    const users = await db.getUsers();
+
+    const enrichedGrabs = grabs.map(g => {
+      const user = users.find(u => u.id === g.userId);
+      return {
+        ...g,
+        userPhone: user ? user.phone : 'Unknown',
+        userUID: user ? user.uid : 'Unknown'
+      };
+    });
+
+    res.json(enrichedGrabs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 14. Approve/Settle User Grab (Admin manual approval)
 router.post('/grabs/:id/settle', authenticateAdmin, async (req, res) => {
   try {
-    let grab;
-    let data;
+    const grabs = await db.getUserGrabs();
+    const grab = grabs.find(g => g.id === req.params.id);
+    if (!grab) return res.status(404).json({ error: 'Grab record not found' });
+    if (grab.status !== 'pending') return res.status(400).json({ error: 'Grab is already processed' });
 
-    if (db.isMongoActive) {
-      const UserGrabModel = require('../models/UserGrab');
-      grab = await UserGrabModel.findOne({ id: req.params.id });
-      if (!grab) return res.status(404).json({ error: 'Grab record not found' });
-      if (grab.status !== 'pending') return res.status(400).json({ error: 'Grab is already settled' });
+    // Update grab status
+    await db.updateUserGrab(grab.id, { status: 'settled' });
 
-      grab.status = 'settled';
-      await grab.save();
+    // Update user balance
+    const user = await db.getUserById(grab.userId);
+    if (user) {
+      const frozenAmount = Math.max(0, parseFloat((user.frozenAmount - grab.amount).toFixed(2)));
+      const balance = parseFloat((user.balance + grab.amount + grab.commission).toFixed(2));
+      const todayEarnings = parseFloat((user.todayEarnings + grab.commission).toFixed(2));
+      const getEarnings = parseFloat((user.getEarnings + grab.commission).toFixed(2));
 
-      const user = await db.getUserById(grab.userId);
-      if (user) {
-        const frozenAmount = Math.max(0, parseFloat((user.frozenAmount - grab.amount).toFixed(2)));
-        const balance = parseFloat((user.balance + grab.amount + grab.commission).toFixed(2));
-        const todayEarnings = parseFloat((user.todayEarnings + grab.commission).toFixed(2));
-        const getEarnings = parseFloat((user.getEarnings + grab.commission).toFixed(2));
+      await db.updateUser(user.id, { frozenAmount, balance, todayEarnings, getEarnings });
 
-        await db.updateUser(user.id, { frozenAmount, balance, todayEarnings, getEarnings });
-
-        if (user.referrerPhone) {
-          const referrer = await db.getUserByPhone(user.referrerPhone);
-          if (referrer) {
-            const teamCommission = parseFloat((grab.commission * 0.1).toFixed(2));
-            await db.updateUser(referrer.id, {
-              balance: parseFloat((referrer.balance + teamCommission).toFixed(2)),
-              teamIncome: parseFloat((referrer.teamIncome + teamCommission).toFixed(2)),
-              todayEarnings: parseFloat((referrer.todayEarnings + teamCommission).toFixed(2))
-            });
-          }
+      // Direct referrer commission (10% of grab commission)
+      if (user.referrerPhone) {
+        const referrer = await db.getUserByPhone(user.referrerPhone);
+        if (referrer) {
+          const teamCommission = parseFloat((grab.commission * 0.1).toFixed(2));
+          await db.updateUser(referrer.id, {
+            balance: parseFloat((referrer.balance + teamCommission).toFixed(2)),
+            teamIncome: parseFloat((referrer.teamIncome + teamCommission).toFixed(2)),
+            todayEarnings: parseFloat((referrer.todayEarnings + teamCommission).toFixed(2))
+          });
         }
       }
-    } else {
-      data = db.readJson();
-      const grabIndex = data.user_grabs.findIndex(g => g.id === req.params.id);
-      if (grabIndex === -1) return res.status(404).json({ error: 'Grab record not found' });
-      grab = data.user_grabs[grabIndex];
-      if (grab.status !== 'pending') return res.status(400).json({ error: 'Grab is already settled' });
+    }
 
-      grab.status = 'settled';
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
-      const userIndex = data.users.findIndex(u => u.id === grab.userId);
-      if (userIndex !== -1) {
-        const user = data.users[userIndex];
-        user.frozenAmount = Math.max(0, user.frozenAmount - grab.amount);
-        user.balance += (grab.amount + grab.commission);
-        user.todayEarnings += grab.commission;
-        user.getEarnings += grab.commission;
+// 15. Reject User Grab (Admin manual rejection)
+router.post('/grabs/:id/reject', authenticateAdmin, async (req, res) => {
+  try {
+    const grabs = await db.getUserGrabs();
+    const grab = grabs.find(g => g.id === req.params.id);
+    if (!grab) return res.status(404).json({ error: 'Grab record not found' });
+    if (grab.status !== 'pending') return res.status(400).json({ error: 'Grab is already processed' });
 
-        if (user.referrerPhone) {
-          const referrerIndex = data.users.findIndex(u => u.phone === user.referrerPhone);
-          if (referrerIndex !== -1) {
-            const referrer = data.users[referrerIndex];
-            const teamCommission = parseFloat((grab.commission * 0.1).toFixed(2));
-            referrer.balance += teamCommission;
-            referrer.teamIncome += teamCommission;
-            referrer.todayEarnings += teamCommission;
-          }
-        }
-      }
-      db.writeJson(data);
+    // Update grab status
+    await db.updateUserGrab(grab.id, { status: 'rejected' });
+
+    // Refund frozen amount back to active balance
+    const user = await db.getUserById(grab.userId);
+    if (user) {
+      const frozenAmount = Math.max(0, parseFloat((user.frozenAmount - grab.amount).toFixed(2)));
+      const balance = parseFloat((user.balance + grab.amount).toFixed(2));
+      await db.updateUser(user.id, { frozenAmount, balance });
     }
 
     res.json({ success: true });

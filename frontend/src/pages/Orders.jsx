@@ -8,13 +8,13 @@ const Orders = () => {
   const [grabs, setGrabs] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const tabs = ['Pending', 'Settlement', 'Submitted', 'Frozen'];
+  const tabs = ['Pending', 'Completed', 'Rejected', 'All'];
 
   const fetchGrabsHistory = async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/grabs', {
+      const response = await fetch('/api/grab', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
@@ -32,7 +32,7 @@ const Orders = () => {
     refreshUser();
     fetchGrabsHistory();
     
-    // Refresh list occasionally to catch auto-settlement transitions
+    // Refresh list occasionally to catch manual approval transitions
     const interval = setInterval(() => {
       fetchGrabsHistory();
     }, 5000);
@@ -44,17 +44,13 @@ const Orders = () => {
   const getFilteredGrabs = () => {
     switch (activeTab) {
       case 'Pending':
-        // actively pending grabbing tasks
         return grabs.filter(g => g.status === 'pending');
-      case 'Settlement':
-        // completed & settled grabbing tasks
+      case 'Completed':
         return grabs.filter(g => g.status === 'settled');
-      case 'Submitted':
-        // all grabs submitted
+      case 'Rejected':
+        return grabs.filter(g => g.status === 'rejected');
+      case 'All':
         return grabs;
-      case 'Frozen':
-        // grabs with funds currently frozen (same as pending for our flow)
-        return grabs.filter(g => g.status === 'pending');
       default:
         return grabs;
     }
@@ -160,10 +156,13 @@ const Orders = () => {
                     fontWeight: '700',
                     padding: '3px 8px',
                     borderRadius: '6px',
-                    background: item.status === 'settled' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)',
-                    color: item.status === 'settled' ? 'var(--success)' : 'var(--warning)'
+                    background: item.status === 'settled' ? 'rgba(16, 185, 129, 0.1)' : 
+                                item.status === 'rejected' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+                    color: item.status === 'settled' ? 'var(--success)' : 
+                           item.status === 'rejected' ? 'var(--danger)' : 'var(--warning)'
                   }}>
-                    {item.status === 'settled' ? 'SETTLED' : 'PROCESSING'}
+                    {item.status === 'settled' ? 'COMPLETED' : 
+                     item.status === 'rejected' ? 'REJECTED' : 'PENDING'}
                   </span>
                 </div>
               </div>
@@ -194,13 +193,17 @@ const Orders = () => {
                 fontSize: '10px',
                 color: 'var(--text-muted)'
               }}>
-                <span>Created: {new Date(item.createdAt).toLocaleTimeString()}</span>
+                <span>Created: {new Date(item.createdAt).toLocaleString()}</span>
                 {item.status === 'pending' ? (
-                  <span style={{ color: 'var(--warning)' }}>
-                    Settles in: {Math.max(0, Math.ceil((new Date(item.settleAt) - new Date()) / 1000))}s
+                  <span style={{ color: 'var(--warning)', fontWeight: '600' }}>
+                    Awaiting Approval
+                  </span>
+                ) : item.status === 'rejected' ? (
+                  <span style={{ color: 'var(--danger)', fontWeight: '600' }}>
+                    Rejected
                   </span>
                 ) : (
-                  <span>Settled: {new Date(item.settleAt).toLocaleTimeString()}</span>
+                  <span>Approved: {new Date(item.settleAt).toLocaleTimeString()}</span>
                 )}
               </div>
 

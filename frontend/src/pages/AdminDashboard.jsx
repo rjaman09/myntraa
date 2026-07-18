@@ -15,6 +15,7 @@ const AdminDashboard = () => {
   const [rechargesList, setRechargesList] = useState([]);
   const [withdrawalsList, setWithdrawalsList] = useState([]);
   const [ordersList, setOrdersList] = useState([]);
+  const [grabsList, setGrabsList] = useState([]);
 
   // Create Order Form State
   const [orderAmount, setOrderAmount] = useState('');
@@ -49,6 +50,10 @@ const AdminDashboard = () => {
       // Orders
       const resOrders = await fetch('/api/admin/orders', { headers });
       if (resOrders.ok) setOrdersList(await resOrders.json());
+
+      // Grabs
+      const resGrabs = await fetch('/api/admin/grabs', { headers });
+      if (resGrabs.ok) setGrabsList(await resGrabs.json());
       
     } catch (e) {
       console.error(e);
@@ -210,6 +215,27 @@ const AdminDashboard = () => {
     }
   };
 
+  // Process Task Grab Approvals
+  const handleProcessGrab = async (id, status) => {
+    try {
+      const headers = { 'Authorization': `Bearer ${adminToken}` };
+      const response = await fetch(`/api/admin/grabs/${id}/${status}`, {
+        method: 'POST',
+        headers
+      });
+
+      if (response.ok) {
+        addToast(`Task grab ${status === 'settle' ? 'approved' : 'rejected'} successfully!`);
+        fetchAllData();
+      } else {
+        const d = await response.json();
+        addToast(d.error || 'Failed to process grab', 'error');
+      }
+    } catch (e) {
+      addToast('Network error', 'error');
+    }
+  };
+
   // Logout admin
   const handleLogout = () => {
     logoutAdmin();
@@ -221,6 +247,7 @@ const AdminDashboard = () => {
   const totalWithdrawAmt = withdrawalsList.filter(w => w.status === 'approved').reduce((sum, w) => sum + w.amount, 0);
   const pendingRecharges = rechargesList.filter(r => r.status === 'pending').length;
   const pendingWithdrawals = withdrawalsList.filter(w => w.status === 'pending').length;
+  const pendingGrabsCount = grabsList.filter(g => g.status === 'pending').length;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', minHeight: '100vh', background: '#0b0f19', color: 'white', paddingBottom: '40px' }}>
@@ -318,7 +345,7 @@ const AdminDashboard = () => {
 
         {/* Tab Controls */}
         <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: '24px', gap: '8px', overflowX: 'auto', width: '100%', paddingBottom: '4px', whiteSpace: 'nowrap' }}>
-          {['Users', 'Recharges', 'Withdrawals', 'Create Task'].map(tab => (
+          {['Users', 'Recharges', 'Withdrawals', 'Create Task', 'User Grabs'].map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -336,7 +363,7 @@ const AdminDashboard = () => {
                 outline: 'none'
               }}
             >
-              {tab}
+              {tab === 'User Grabs' && pendingGrabsCount > 0 ? `${tab} (${pendingGrabsCount})` : tab}
             </button>
           ))}
         </div>
@@ -696,6 +723,93 @@ const AdminDashboard = () => {
               )}
             </div>
 
+          </div>
+        )}
+
+        {/* ==========================================
+            TAB CONTENT: USER GRABS
+            ========================================== */}
+        {activeTab === 'User Grabs' && (
+          <div style={{ background: '#151c2c', borderRadius: '16px', border: '1px solid var(--border)', overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
+                  <th style={{ padding: '16px' }}>Member Details</th>
+                  <th style={{ padding: '16px' }}>Order Details</th>
+                  <th style={{ padding: '16px' }}>Order Amount</th>
+                  <th style={{ padding: '16px' }}>Commission</th>
+                  <th style={{ padding: '16px' }}>Timestamp</th>
+                  <th style={{ padding: '16px' }}>Status</th>
+                  <th style={{ padding: '16px', textAlign: 'center' }}>Approval Control</th>
+                </tr>
+              </thead>
+              <tbody>
+                {grabsList.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                      No order grab logs found.
+                    </td>
+                  </tr>
+                ) : (
+                  grabsList.map(grabItem => (
+                    <tr key={grabItem.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                      <td style={{ padding: '16px' }}>
+                        <div style={{ fontWeight: '700' }}>{grabItem.userPhone}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>UID: {grabItem.userUID}</div>
+                      </td>
+                      <td style={{ padding: '16px' }}>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          <div style={{ width: '30px', height: '30px', borderRadius: '4px', overflow: 'hidden', background: '#eee' }}>
+                            <img src={grabItem.productImage} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '12px', fontWeight: '700', color: 'white' }}>{grabItem.productName}</div>
+                            <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2.5px' }}>Grab ID: {grabItem.id.slice(0, 8).toUpperCase()}...</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td style={{ padding: '16px', fontWeight: '700' }}>₹ {grabItem.amount.toFixed(2)}</td>
+                      <td style={{ padding: '16px', fontWeight: '700', color: 'var(--success)' }}>₹ {grabItem.commission.toFixed(2)}</td>
+                      <td style={{ padding: '16px', fontSize: '12px' }}>{new Date(grabItem.createdAt).toLocaleString()}</td>
+                      <td style={{ padding: '16px' }}>
+                        <span style={{
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          padding: '4px 8px',
+                          borderRadius: '6px',
+                          background: grabItem.status === 'settled' ? 'rgba(16, 185, 129, 0.1)' : 
+                                      grabItem.status === 'rejected' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+                          color: grabItem.status === 'settled' ? 'var(--success)' : 
+                                 grabItem.status === 'rejected' ? 'var(--danger)' : 'var(--warning)'
+                        }}>
+                          {grabItem.status === 'settled' ? 'COMPLETED' : grabItem.status.toUpperCase()}
+                        </span>
+                      </td>
+                      <td style={{ padding: '16px', textAlign: 'center' }}>
+                        {grabItem.status === 'pending' ? (
+                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                            <button
+                              onClick={() => handleProcessGrab(grabItem.id, 'settle')}
+                              style={{ background: 'var(--success)', border: 'none', color: 'white', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: '600' }}
+                            >
+                              <Check size={14} /> Approve
+                            </button>
+                            <button
+                              onClick={() => handleProcessGrab(grabItem.id, 'reject')}
+                              style={{ background: 'var(--danger)', border: 'none', color: 'white', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: '600' }}
+                            >
+                              <X size={14} /> Reject
+                            </button>
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Settled</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         )}
 
