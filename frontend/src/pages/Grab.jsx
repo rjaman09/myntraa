@@ -8,6 +8,7 @@ const Grab = () => {
   const [grabbedOrder, setGrabbedOrder] = useState(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [availableCount, setAvailableCount] = useState(0);
+  const [availableTasks, setAvailableTasks] = useState([]);
   const [stats, setStats] = useState({
     completedToday: 0,
     unfinishedToday: 0,
@@ -24,6 +25,7 @@ const Grab = () => {
       if (response.ok) {
         const data = await response.json();
         setAvailableCount(data.availableCount || 0);
+        setAvailableTasks(data.eligibleOrders || []);
       }
     } catch (error) {
       console.error('Error fetching available tasks status:', error);
@@ -152,6 +154,25 @@ const Grab = () => {
     } catch (error) {
       addToast('Error submitting order', 'error');
     }
+  };
+
+  const handleSelectTask = (task) => {
+    if (grabbing) return;
+    if (!user) return;
+    if (user.balance < task.amount) {
+      addToast('Insufficient wallet balance to grab this task!', 'error');
+      return;
+    }
+
+    setGrabbedOrder({
+      id: task.id,
+      amount: task.amount,
+      productName: task.productName,
+      productImage: task.productImage,
+      commissionRate: task.commissionRate,
+      commission: parseFloat((task.amount * task.commissionRate).toFixed(2))
+    });
+    setShowConfirmModal(true);
   };
 
   return (
@@ -305,6 +326,67 @@ const Grab = () => {
           <div style={{ color: 'var(--text-secondary)', fontSize: '13px', marginTop: '16px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--primary)', animation: 'ping 1s infinite' }} />
             Searching secure e-commerce orders...
+          </div>
+        )}
+      </div>
+
+      {/* Manual Task Selection List */}
+      <div style={{ marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <h3 style={{ fontSize: '14px', fontWeight: '700', color: 'white', display: 'flex', alignItems: 'center', gap: '6px', borderBottom: '1px solid var(--border)', paddingBottom: '8px' }}>
+          <Sparkles size={16} style={{ color: 'var(--primary)' }} />
+          <span>Available Tasks ({availableTasks.length})</span>
+        </h3>
+        
+        {availableTasks.length === 0 ? (
+          <div className="glass-card" style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
+            No tasks allocated to you at the moment. Contact Admin.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {availableTasks.map(task => (
+              <div key={task.id} className="glass-card" style={{
+                padding: '12px 14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: 'rgba(255, 255, 255, 0.02)',
+                border: '1px solid var(--border)',
+                borderRadius: '12px'
+              }}>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flex: 1, minWidth: 0 }}>
+                  <div style={{ width: '40px', height: '40px', borderRadius: '6px', overflow: 'hidden', background: '#eaeaea', flexShrink: 0 }}>
+                    <img src={task.productImage} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '12px', fontWeight: '700', color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {task.productName}
+                    </div>
+                    <div style={{ fontSize: '10px', color: 'var(--success)', fontWeight: '600', marginTop: '2px' }}>
+                      Commission: 20% (+₹{(task.amount * task.commissionRate).toFixed(2)})
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginLeft: '12px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: '800', color: 'white' }}>₹{task.amount.toFixed(2)}</div>
+                  <button
+                    onClick={() => handleSelectTask(task)}
+                    style={{
+                      background: 'linear-gradient(135deg, #ff3f6c 0%, #ff6f61 100%)',
+                      border: 'none',
+                      borderRadius: '8px',
+                      padding: '6px 12px',
+                      color: 'white',
+                      fontSize: '11px',
+                      fontWeight: '700',
+                      cursor: 'pointer',
+                      boxShadow: '0 4px 10px rgba(255, 63, 108, 0.2)'
+                    }}
+                  >
+                    Grab
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

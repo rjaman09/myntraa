@@ -21,7 +21,13 @@ router.get('/status', authenticateToken, async (req, res) => {
 
     res.json({
       availableCount: eligibleOrders.length,
-      eligibleOrders: eligibleOrders.map(o => ({ id: o.id, amount: o.amount }))
+      eligibleOrders: eligibleOrders.map(o => ({
+        id: o.id,
+        amount: o.amount,
+        productName: o.productName,
+        productImage: o.productImage,
+        commissionRate: o.commissionRate
+      }))
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
