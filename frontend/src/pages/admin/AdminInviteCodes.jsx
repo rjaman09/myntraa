@@ -313,7 +313,7 @@ const AdminInviteCodes = ({ inviteCodes = [], fetchAllData, adminToken, addToast
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', color: '#e5e7eb' }}>
             <thead>
               <tr style={{ background: '#111827', borderBottom: '1px solid #374151', color: '#9ca3af', textAlign: 'left' }}>
-                <th style={{ padding: '14px 16px' }}>CODE</th>
+                <th style={{ padding: '14px 16px' }}>INVITATION LINK</th>
                 <th style={{ padding: '14px 16px' }}>NOTE / REG. CUSTOMER</th>
                 <th style={{ padding: '14px 16px' }}>STATUS</th>
                 <th style={{ padding: '14px 16px' }}>CREATED BY</th>
@@ -333,16 +333,24 @@ const AdminInviteCodes = ({ inviteCodes = [], fetchAllData, adminToken, addToast
                   <tr key={item.code} style={{ borderBottom: '1px solid #374151', background: '#1f2937' }}>
                     <td style={{ padding: '14px 16px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontFamily: 'monospace', fontSize: '14px', fontWeight: '700', color: 'white' }}>{item.code}</span>
+                        <span style={{ fontFamily: 'monospace', fontSize: '11px', fontWeight: '700', color: '#60a5fa', background: '#111827', padding: '4px 8px', borderRadius: '6px' }}>
+                          {`${window.location.origin}/register?code=${item.code}`}
+                        </span>
                         <button 
                           onClick={() => handleCopy(item.code)}
                           style={{
-                            background: 'none',
+                            background: '#374151',
                             border: 'none',
                             cursor: 'pointer',
-                            padding: '4px',
-                            color: copiedCode === item.code ? '#10b981' : '#6b7280'
+                            padding: '6px',
+                            borderRadius: '6px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: copiedCode === item.code ? '#10b981' : '#e5e7eb',
+                            transition: 'all 0.2s'
                           }}
+                          title="Copy registration link"
                         >
                           {copiedCode === item.code ? <Check size={14} /> : <Copy size={14} />}
                         </button>
