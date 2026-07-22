@@ -20,6 +20,11 @@ const Recharge = () => {
   const [upiId, setUpiId] = useState('myntrapayments@axisbank');
   const [qrCodeUrl, setQrCodeUrl] = useState('');
 
+  // QR Codes Pool and Timer states
+  const [qrPool, setQrPool] = useState([]);
+  const [selectedQr, setSelectedQr] = useState(null);
+  const [timeLeft, setTimeLeft] = useState(300);
+
   // Fetch settings & records
   const fetchSettings = async () => {
     try {
@@ -34,6 +39,21 @@ const Recharge = () => {
           setUpiId(data.upiId || 'myntrapayments@axisbank');
           setQrCodeUrl(data.qrCodeUrl || '');
         }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const fetchQrPool = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/auth/qr-codes', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setQrPool(data || []);
       }
     } catch (e) {
       console.error(e);
@@ -58,11 +78,68 @@ const Recharge = () => {
   useEffect(() => {
     refreshUser();
     fetchSettings();
+    fetchQrPool();
     fetchRecords();
   }, []);
 
+  // 5 Minutes Countdown Timer
+  useEffect(() => {
+    let interval = null;
+    if (showPaymentModal && timeLeft > 0) {
+      interval = setInterval(() => {
+        setTimeLeft(prev => prev - 1);
+      }, 1000);
+    } else if (timeLeft === 0 && showPaymentModal) {
+      setShowPaymentModal(false);
+      addToast('Payment session expired. Please start a new recharge request.', 'error');
+    }
+    return () => clearInterval(interval);
+  }, [showPaymentModal, timeLeft]);
+
+  // Select random QR code from active pool
+  const selectRandomQr = (currentPool = qrPool) => {
+    if (currentPool && currentPool.length > 0) {
+      const randomIndex = Math.floor(Math.random() * currentPool.length);
+      const chosen = currentPool[randomIndex];
+      setSelectedQr({
+        imageUrl: chosen.imageUrl,
+        upiId: chosen.upiId || upiId
+      });
+    } else {
+      setSelectedQr({
+        imageUrl: qrCodeUrl,
+        upiId: upiId
+      });
+    }
+  };
+
+  // User refreshes QR code manually
+  const handleRefreshQr = () => {
+    if (!qrPool || qrPool.length <= 1) {
+      addToast('No other active QR codes available in the pool.');
+      return;
+    }
+    let nextQr = selectedQr;
+    let attempts = 0;
+    while (attempts < 10) {
+      const randomIndex = Math.floor(Math.random() * qrPool.length);
+      const candidate = qrPool[randomIndex];
+      if (candidate.imageUrl !== selectedQr?.imageUrl) {
+        nextQr = {
+          imageUrl: candidate.imageUrl,
+          upiId: candidate.upiId || upiId
+        };
+        break;
+      }
+      attempts++;
+    }
+    setSelectedQr(nextQr);
+    addToast('QR Code rotated successfully!');
+  };
+
   const handleCopyUPI = () => {
-    navigator.clipboard.writeText(upiId);
+    const activeUpi = selectedQr?.upiId || upiId;
+    navigator.clipboard.writeText(activeUpi);
     setCopied(true);
     addToast('UPI Address copied to clipboard!');
     setTimeout(() => setCopied(false), 2000);
@@ -76,8 +153,13 @@ const Recharge = () => {
       return;
     }
     setUtrNumber('');
+    setTimeLeft(300); // reset 5 minutes
+    
+    // Choose QR
+    selectRandomQr();
     setShowPaymentModal(true);
   };
+
 
   const handleConfirmPayment = async () => {
     if (!utrNumber || utrNumber.length !== 12 || isNaN(utrNumber)) {
@@ -269,9 +351,14 @@ const Recharge = () => {
       {showPaymentModal && (
         <div className="modal-overlay">
           <div className="modal-content" style={{ width: '92%', maxWidth: '360px' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: '800', textAlign: 'center', marginBottom: '16px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: '800', textAlign: 'center', marginBottom: '8px' }}>
               Confirm Recharge: ₹ {parseFloat(amount).toFixed(2)}
             </h3>
+
+            {/* 5-minute Countdown Timer */}
+            <div style={{ fontSize: '12px', color: '#ef4444', textAlign: 'center', fontWeight: '800', marginBottom: '16px' }}>
+              Time remaining: {Math.floor(timeLeft / 60).toString().padStart(2, '0')}:{ (timeLeft % 60).toString().padStart(2, '0') }
+            </div>
 
             {/* UPI Address Box */}
             <div style={{
@@ -286,7 +373,7 @@ const Recharge = () => {
             }}>
               <div>
                 <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '2px' }}>UPI ID (Copy this)</div>
-                <div style={{ fontSize: '13px', fontWeight: '700', color: 'white' }}>{upiId}</div>
+                <div style={{ fontSize: '13px', fontWeight: '700', color: 'white' }}>{selectedQr?.upiId || upiId}</div>
               </div>
               <button 
                 type="button" 
@@ -298,10 +385,10 @@ const Recharge = () => {
             </div>
 
             {/* Dynamic QR Code */}
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '10px' }}>
               <div style={{ background: 'white', padding: '12px', borderRadius: '12px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                {qrCodeUrl ? (
-                  <img src={qrCodeUrl} alt="QR Code" style={{ width: '130px', height: '130px', objectFit: 'contain', display: 'block' }} />
+                {(selectedQr?.imageUrl || qrCodeUrl) ? (
+                  <img src={selectedQr?.imageUrl || qrCodeUrl} alt="QR Code" style={{ width: '130px', height: '130px', objectFit: 'contain', display: 'block' }} />
                 ) : (
                   <svg width="130" height="130" viewBox="0 0 29 29" style={{ display: 'block' }}>
                     <path fill="black" d="M0 0h7v7H0zm1 1v5h5V1zm2 2h1v1H3zm6-3v1h1V0zm1 1h1V0h-1zm1 1h1V1h-1zm1 1h1v1h-1zm-4 1h1V3H9zm2 1h1V4h-1zm2 1h1v1h-1zm2 1h1V6h-1zm-6 2h1V8H9zm2 1h1V9h-1zm1 1h1V10h-1zm2 1h2v1h-2zm-6 2h1v-1H9zm1 1h1v1h-1zm1 1h1v1h-1zm2 1h2v1h-2zm-7 2h1v-1H8zm1 1h1v1h-1zm1 1h1v1h-1zm2 1h2v1h-2zM0 9h7v7H0zm1 1v5h5v-5zm2 2h1v1H3zm15-12h7v7h-7zm1 1v5h5V1zm2 2h1v1H3z" />
@@ -313,6 +400,26 @@ const Recharge = () => {
                   SCAN TO PAY
                 </div>
               </div>
+            </div>
+
+            {/* Refresh QR button */}
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
+              <button
+                type="button"
+                onClick={handleRefreshQr}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid var(--border)',
+                  color: 'white',
+                  fontSize: '11px',
+                  fontWeight: '700',
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  cursor: 'pointer'
+                }}
+              >
+                Can't pay? Refresh QR Code
+              </button>
             </div>
 
             {/* Instruction Warning */}

@@ -657,4 +657,50 @@ router.post('/settings', authenticateAdmin, async (req, res) => {
   }
 });
 
+// 30. Get QR Codes Pool
+router.get('/qr-codes', authenticateAdmin, async (req, res) => {
+  try {
+    const list = await db.getQrCodes();
+    res.json(list);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 31. Add new QR Code to Pool
+router.post('/qr-codes', authenticateAdmin, async (req, res) => {
+  try {
+    const { imageUrl, upiId } = req.body;
+    if (!imageUrl) {
+      return res.status(400).json({ error: 'Image URL is required' });
+    }
+    const id = 'qr_' + uuidv4().slice(0, 8);
+    const created = await db.createQrCode(id, imageUrl, upiId || '');
+    res.json({ success: true, qr: created });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 32. Toggle QR Code Active Status
+router.post('/qr-codes/:id/toggle', authenticateAdmin, async (req, res) => {
+  try {
+    const { isActive } = req.body;
+    await db.toggleQrCode(req.params.id, isActive);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 33. Delete QR Code
+router.delete('/qr-codes/:id', authenticateAdmin, async (req, res) => {
+  try {
+    await db.deleteQrCode(req.params.id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;

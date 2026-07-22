@@ -14,6 +14,7 @@ const Product = require('../models/Product');
 const Task = require('../models/Task');
 const InviteCode = require('../models/InviteCode');
 const Settings = require('../models/Settings');
+const QrCode = require('../models/QrCode');
 
 const dbPath = path.join(__dirname, '..', 'db.json');
 
@@ -26,6 +27,7 @@ const defaultDb = {
   products: [],
   tasks: [],
   invite_codes: [],
+  qr_codes: [],
   settings: {
     id: 'system_settings',
     minRecharge: 100,
@@ -240,6 +242,17 @@ class DatabaseAdapter {
       await this.tidbPool.query(`
         INSERT IGNORE INTO settings (id, minRecharge, minWithdrawal, commissionRate, maxTasksPerDay, upiId, qrCodeUrl)
         VALUES ('system_settings', 100.00, 100.00, 0.20, 10, 'myntra@ybl', '')
+      `);
+
+      // 10. QR Codes Table
+      await this.tidbPool.query(`
+        CREATE TABLE IF NOT EXISTS qr_codes (
+          id VARCHAR(50) PRIMARY KEY,
+          imageUrl VARCHAR(500) NOT NULL,
+          upiId VARCHAR(100) DEFAULT '',
+          isActive BOOLEAN DEFAULT TRUE,
+          createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
       `);
 
       console.log('TiDB SQL Database schemas initialized successfully.');
@@ -944,6 +957,101 @@ class DatabaseAdapter {
     data.settings = { ...data.settings, ...updates };
     this.writeJson(data);
     return data.settings;
+  }
+
+  // --- QR Codes CRUD Operations ---
+  async getQrCodes() {
+    if (this.isTidbActive) {
+      const [rows] = await this.tidbPool.query('SELECT * FROM qr_codes ORDER BY createdAt DESC');
+      return rows.map(r => ({ ...r, isActive: r.isActive === 1 || r.isActive === true }));
+    }
+    if (this.isMongoActive) {
+      return await QrCode.find({}).sort({ createdAt: -1 }).lean();
+    }
+    const data = this.readJson();
+    if (!data.qr_codes) data.qr_codes = [];
+    return data.qr_codes;
+  }
+
+  async createQrCode(id, imageUrl, upiId) {
+    const newQr = {
+      id,
+      imageUrl,
+      upiId: upiId || '',
+      isActive: true,
+      createdAt: new Date().toISOString()
+    };
+
+    if (this.isTidbActive) {
+      await this.tidbPool.query(
+        'INSERT INTO qr_codes (id, imageUrl, upiId, isActive) VALUES (?, ?, ?, ?)',
+        [newQr.id, newQr.imageUrl, newQr.upiId, true]
+      );
+      return newQr;
+    }
+    if (this.isMongoActive) {
+      const doc = await new QrCode(newQr).save();
+      return doc.toObject();
+    }
+    const data = this.readJson();
+    if (!data.qr_codes) data.qr_codes = [];
+    data.qr_codes.push(newQr);
+    this.writeJson(data);
+    return newQr;
+  }
+
+  async toggleQrCode(id, isActive) {
+    const val = isActive ? 1 : 0;
+    if (this.isTidbActive) {
+      await this.tidbPool.query('UPDATE qr_codes SET isActive = ? WHERE id = ?', [val, id]);
+      return true;
+    }
+    if (this.isMongoActive) {
+      await QrCode.findOneAndUpdate({ id }, { $set: { isActive } });
+      return true;
+    }
+    const data = this.readJson();
+    if (!data.qr_codes) data.qr_codes = [];
+    const item = data.qr_codes.find(q => q.id === id);
+    if (item) {
+      item.isActive = isActive;
+      this.writeJson(data);
+      return true;
+    }
+    return false;
+  }
+
+  async deleteQrCode(id) {
+    if (this.isTidbActive) {
+      await this.tidbPool.query('DELETE FROM qr_codes WHERE id = ?', [id]);
+      return true;
+    }
+    if (this.isMongoActive) {
+      await QrCode.findOneAndDelete({ id });
+      return true;
+    }
+    const data = this.readJson();
+    if (!data.qr_codes) data.qr_codes = [];
+    const index = data.qr_codes.findIndex(q => q.id === id);
+    if (index !== -1) {
+      data.qr_codes.splice(index, 1);
+      this.writeJson(data);
+      return true;
+    }
+    return false;
+  }
+
+  async getActiveQrCodes() {
+    if (this.isTidbActive) {
+      const [rows] = await this.tidbPool.query('SELECT * FROM qr_codes WHERE isActive = TRUE');
+      return rows.map(r => ({ ...r, isActive: true }));
+    }
+    if (this.isMongoActive) {
+      return await QrCode.find({ isActive: true }).lean();
+    }
+    const data = this.readJson();
+    if (!data.qr_codes) data.qr_codes = [];
+    return data.qr_codes.filter(q => q.isActive === true || q.isActive === 1);
   }
 
   // --- Redis / In-Memory Cache Operations for OTP and Rate Limiting ---

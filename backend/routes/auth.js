@@ -325,4 +325,14 @@ router.get('/settings', authenticateToken, async (req, res) => {
   }
 });
 
+// 31. Get active QR codes list for user recharges
+router.get('/qr-codes', authenticateToken, async (req, res) => {
+  try {
+    const list = await db.getActiveQrCodes();
+    res.json(list);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;
