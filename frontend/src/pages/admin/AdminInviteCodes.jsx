@@ -71,11 +71,12 @@ const AdminInviteCodes = ({ inviteCodes = [], fetchAllData, adminToken, addToast
     }
   };
 
-  // Handle Copy
+  // Handle Copy Link
   const handleCopy = (code) => {
-    navigator.clipboard.writeText(code);
+    const inviteLink = `${window.location.origin}/register?code=${code}`;
+    navigator.clipboard.writeText(inviteLink);
     setCopiedCode(code);
-    addToast('Invite code copied to clipboard!');
+    addToast('Registration link copied to clipboard!');
     setTimeout(() => setCopiedCode(null), 2000);
   };
 

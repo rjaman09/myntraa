@@ -21,6 +21,15 @@ const Register = () => {
   const { refreshUser } = useAuth();
   const navigate = useNavigate();
 
+  // Parse query parameters to auto-fill invite code
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const codeParam = searchParams.get('code');
+    if (codeParam) {
+      setInviteCode(codeParam);
+    }
+  }, []);
+
   // Countdown timer logic
   useEffect(() => {
     let interval = null;
@@ -75,6 +84,7 @@ const Register = () => {
   const handleRegisterSubmit = async (e) => {
     e.preventDefault();
     
+    if (!inviteCode) return toast.error('Invitation code is required to register');
     if (!phone) return toast.error('Phone number is required');
     if (!otp) return toast.error('SMS verification code is required');
     if (!password) return toast.error('Login password is required');
