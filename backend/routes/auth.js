@@ -315,4 +315,14 @@ router.post('/register', authLimiter, async (req, res) => {
   res.json({ token, user: userResponse });
 });
 
+// 30. Get public portal settings for users
+router.get('/settings', authenticateToken, async (req, res) => {
+  try {
+    const settings = await db.getSettings();
+    res.json(settings);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;

@@ -15,9 +15,31 @@ const Recharge = () => {
   const [rechargeRecords, setRechargeRecords] = useState([]);
   const [copied, setCopied] = useState(false);
 
-  const mockUPI = 'myntrapayments@axisbank';
+  // Settings loaded from backend
+  const [minRecharge, setMinRecharge] = useState(100);
+  const [upiId, setUpiId] = useState('myntrapayments@axisbank');
+  const [qrCodeUrl, setQrCodeUrl] = useState('');
 
-  // Fetch records
+  // Fetch settings & records
+  const fetchSettings = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/auth/settings', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data) {
+          setMinRecharge(data.minRecharge || 100);
+          setUpiId(data.upiId || 'myntrapayments@axisbank');
+          setQrCodeUrl(data.qrCodeUrl || '');
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const fetchRecords = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -35,11 +57,12 @@ const Recharge = () => {
 
   useEffect(() => {
     refreshUser();
+    fetchSettings();
     fetchRecords();
   }, []);
 
   const handleCopyUPI = () => {
-    navigator.clipboard.writeText(mockUPI);
+    navigator.clipboard.writeText(upiId);
     setCopied(true);
     addToast('UPI Address copied to clipboard!');
     setTimeout(() => setCopied(false), 2000);
@@ -48,8 +71,8 @@ const Recharge = () => {
   const handleRechargeSubmit = (e) => {
     e.preventDefault();
     const numAmt = parseFloat(amount);
-    if (isNaN(numAmt) || numAmt < 100 || numAmt > 50000) {
-      addToast('Please enter an amount between ₹100.00 and ₹50,000.00', 'error');
+    if (isNaN(numAmt) || numAmt < minRecharge || numAmt > 50000) {
+      addToast(`Please enter an amount between ₹${minRecharge.toFixed(2)} and ₹50,000.00`, 'error');
       return;
     }
     setUtrNumber('');
@@ -263,7 +286,7 @@ const Recharge = () => {
             }}>
               <div>
                 <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '2px' }}>UPI ID (Copy this)</div>
-                <div style={{ fontSize: '13px', fontWeight: '700', color: 'white' }}>{mockUPI}</div>
+                <div style={{ fontSize: '13px', fontWeight: '700', color: 'white' }}>{upiId}</div>
               </div>
               <button 
                 type="button" 
@@ -274,14 +297,18 @@ const Recharge = () => {
               </button>
             </div>
 
-            {/* Dynamic QR Code SVG */}
+            {/* Dynamic QR Code */}
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
               <div style={{ background: 'white', padding: '12px', borderRadius: '12px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <svg width="130" height="130" viewBox="0 0 29 29" style={{ display: 'block' }}>
-                  <path fill="black" d="M0 0h7v7H0zm1 1v5h5V1zm2 2h1v1H3zm6-3v1h1V0zm1 1h1V0h-1zm1 1h1V1h-1zm1 1h1v1h-1zm-4 1h1V3H9zm2 1h1V4h-1zm2 1h1v1h-1zm2 1h1V6h-1zm-6 2h1V8H9zm2 1h1V9h-1zm1 1h1V10h-1zm2 1h2v1h-2zm-6 2h1v-1H9zm1 1h1v1h-1zm1 1h1v1h-1zm2 1h2v1h-2zm-7 2h1v-1H8zm1 1h1v1h-1zm1 1h1v1h-1zm2 1h2v1h-2zM0 9h7v7H0zm1 1v5h5v-5zm2 2h1v1H3zm15-12h7v7h-7zm1 1v5h5V1zm2 2h1v1H3z" />
-                  <rect x="11" y="11" width="7" height="7" fill="var(--primary)" />
-                  <path fill="black" d="M22 9h1v1h-1zm1 1h1v1h-1zm1 1h1v1h-1zm1 1h1v1h-1zm-4 1h1v1h-1zm-1 1h1v1h-1zm-1 1h1v1h-1zm2 1h1v1h-1zm1 1h1v1h-1zm1 1h1v1h-1zM9 22h1v1H9zm1 1h1v1h-1zm1 1h1v1h-1zm1 1h1v1h-1zm-4 1h1v1h-1zm-1 1h1v1h-1zm-1 1h1v1h-1zm2 1h1v1h-1zm1 1h1v1h-1zm1 1h1v1h-1z" />
-                </svg>
+                {qrCodeUrl ? (
+                  <img src={qrCodeUrl} alt="QR Code" style={{ width: '130px', height: '130px', objectFit: 'contain', display: 'block' }} />
+                ) : (
+                  <svg width="130" height="130" viewBox="0 0 29 29" style={{ display: 'block' }}>
+                    <path fill="black" d="M0 0h7v7H0zm1 1v5h5V1zm2 2h1v1H3zm6-3v1h1V0zm1 1h1V0h-1zm1 1h1V1h-1zm1 1h1v1h-1zm-4 1h1V3H9zm2 1h1V4h-1zm2 1h1v1h-1zm2 1h1V6h-1zm-6 2h1V8H9zm2 1h1V9h-1zm1 1h1V10h-1zm2 1h2v1h-2zm-6 2h1v-1H9zm1 1h1v1h-1zm1 1h1v1h-1zm2 1h2v1h-2zm-7 2h1v-1H8zm1 1h1v1h-1zm1 1h1v1h-1zm2 1h2v1h-2zM0 9h7v7H0zm1 1v5h5v-5zm2 2h1v1H3zm15-12h7v7h-7zm1 1v5h5V1zm2 2h1v1H3z" />
+                    <rect x="11" y="11" width="7" height="7" fill="var(--primary)" />
+                    <path fill="black" d="M22 9h1v1h-1zm1 1h1v1h-1zm1 1h1v1h-1zm1 1h1v1h-1zm-4 1h1v1h-1zm-1 1h1v1h-1zm-1 1h1v1h-1zm2 1h1v1h-1zm1 1h1v1h-1zm1 1h1v1h-1zM9 22h1v1H9zm1 1h1v1h-1zm1 1h1v1h-1zm1 1h1v1h-1zm-4 1h1v1h-1zm-1 1h1v1h-1zm-1 1h1v1h-1zm2 1h1v1h-1zm1 1h1v1h-1zm1 1h1v1h-1z" />
+                  </svg>
+                )}
                 <div style={{ color: '#0b0f19', fontSize: '10px', fontWeight: '800', marginTop: '6px', textAlign: 'center' }}>
                   SCAN TO PAY
                 </div>

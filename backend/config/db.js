@@ -13,6 +13,7 @@ const Withdrawal = require('../models/Withdrawal');
 const Product = require('../models/Product');
 const Task = require('../models/Task');
 const InviteCode = require('../models/InviteCode');
+const Settings = require('../models/Settings');
 
 const dbPath = path.join(__dirname, '..', 'db.json');
 
@@ -24,7 +25,16 @@ const defaultDb = {
   withdrawals: [],
   products: [],
   tasks: [],
-  invite_codes: []
+  invite_codes: [],
+  settings: {
+    id: 'system_settings',
+    minRecharge: 100,
+    minWithdrawal: 100,
+    commissionRate: 0.20,
+    maxTasksPerDay: 10,
+    upiId: 'myntra@ybl',
+    qrCodeUrl: ''
+  }
 };
 
 class DatabaseAdapter {
@@ -210,6 +220,26 @@ class DatabaseAdapter {
           createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
           usedAt DATETIME
         )
+      `);
+
+      // 9. System Settings Table
+      await this.tidbPool.query(`
+        CREATE TABLE IF NOT EXISTS settings (
+          id VARCHAR(50) PRIMARY KEY,
+          minRecharge DECIMAL(15, 2) DEFAULT 100.00,
+          minWithdrawal DECIMAL(15, 2) DEFAULT 100.00,
+          commissionRate DECIMAL(5, 4) DEFAULT 0.20,
+          maxTasksPerDay INT DEFAULT 10,
+          upiId VARCHAR(100) DEFAULT 'myntra@ybl',
+          qrCodeUrl VARCHAR(500) DEFAULT '',
+          updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // Seed default settings row if not present
+      await this.tidbPool.query(`
+        INSERT IGNORE INTO settings (id, minRecharge, minWithdrawal, commissionRate, maxTasksPerDay, upiId, qrCodeUrl)
+        VALUES ('system_settings', 100.00, 100.00, 0.20, 10, 'myntra@ybl', '')
       `);
 
       console.log('TiDB SQL Database schemas initialized successfully.');
@@ -867,6 +897,53 @@ class DatabaseAdapter {
       return true;
     }
     return false;
+  }
+
+  // --- Settings CRUD Operations ---
+  async getSettings() {
+    if (this.isTidbActive) {
+      const [rows] = await this.tidbPool.query('SELECT * FROM settings WHERE id = ?', ['system_settings']);
+      return rows[0] || null;
+    }
+    if (this.isMongoActive) {
+      let doc = await Settings.findOne({ id: 'system_settings' }).lean();
+      if (!doc) {
+        doc = await new Settings({ id: 'system_settings' }).save();
+      }
+      return doc;
+    }
+    const data = this.readJson();
+    if (!data.settings) {
+      data.settings = {
+        id: 'system_settings',
+        minRecharge: 100,
+        minWithdrawal: 100,
+        commissionRate: 0.20,
+        maxTasksPerDay: 10,
+        upiId: 'myntra@ybl',
+        qrCodeUrl: ''
+      };
+      this.writeJson(data);
+    }
+    return data.settings;
+  }
+
+  async updateSettings(updates) {
+    if (this.isTidbActive) {
+      const keys = Object.keys(updates);
+      if (keys.length === 0) return this.getSettings();
+      const sets = keys.map(k => `${k} = ?`).join(', ');
+      const values = Object.values(updates);
+      await this.tidbPool.query(`UPDATE settings SET ${sets} WHERE id = ?`, [...values, 'system_settings']);
+      return this.getSettings();
+    }
+    if (this.isMongoActive) {
+      return await Settings.findOneAndUpdate({ id: 'system_settings' }, { $set: updates }, { new: true, upsert: true }).lean();
+    }
+    const data = this.readJson();
+    data.settings = { ...data.settings, ...updates };
+    this.writeJson(data);
+    return data.settings;
   }
 
   // --- Redis / In-Memory Cache Operations for OTP and Rate Limiting ---

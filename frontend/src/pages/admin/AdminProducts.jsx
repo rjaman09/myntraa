@@ -16,10 +16,43 @@ const AdminProducts = ({ adminToken, addToast }) => {
   const [description, setDescription] = useState('');
   const [image, setImage] = useState('');
   const [isActive, setIsActive] = useState(true);
+  const [uploading, setUploading] = useState(false);
 
   // Filter states
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+
+  const handleUploadImage = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setUploading(true);
+    const formData = new FormData();
+    formData.append('image', file);
+
+    try {
+      const response = await fetch('/api/admin/upload', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${adminToken}`
+        },
+        body: formData
+      });
+
+      if (response.ok) {
+        const resData = await response.json();
+        setImage(resData.url);
+        addToast('Product photo uploaded successfully!');
+      } else {
+        const err = await response.json();
+        addToast(err.error || 'Failed to upload photo', 'error');
+      }
+    } catch (err) {
+      addToast('Connection error during upload', 'error');
+    } finally {
+      setUploading(false);
+    }
+  };
 
   // Load products list
   const fetchProducts = async () => {
@@ -588,17 +621,48 @@ const AdminProducts = ({ adminToken, addToast }) => {
               border: '2px dashed #374151',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center'
+              justifyContent: 'center',
+              position: 'relative'
             }}>
               {image ? (
                 <img src={image} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', color: '#6b7280' }}>
                   <Upload size={24} />
-                  <span style={{ fontSize: '10px' }}>Enter Image URL</span>
+                  <span style={{ fontSize: '10px' }}>Enter Image URL or Upload</span>
                 </div>
               )}
             </div>
+
+            {/* Hidden File Input */}
+            <input 
+              type="file" 
+              id="product-image-file" 
+              accept="image/*" 
+              onChange={handleUploadImage} 
+              style={{ display: 'none' }}
+            />
+            
+            <label 
+              htmlFor="product-image-file" 
+              style={{
+                background: '#374151',
+                border: 'none',
+                color: 'white',
+                padding: '6px 12px',
+                borderRadius: '6px',
+                fontSize: '11px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'background 0.2s',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+            >
+              <Upload size={12} />
+              <span>{uploading ? 'Uploading...' : 'Upload Image File'}</span>
+            </label>
           </div>
 
           {/* Form Actions Footer */}

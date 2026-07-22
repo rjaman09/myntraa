@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
+const fs = require('fs');
+const path = require('path');
 const db = require('../config/db');
 const { authenticateAdmin } = require('../middleware/auth');
 const { authLimiter } = require('../middleware/rateLimiter');
@@ -584,6 +586,72 @@ router.post('/users/:id/release-frozen', authenticateAdmin, async (req, res) => 
 
     await db.updateUser(user.id, { balance: newBalance, frozenAmount: newFrozen, todayEarnings });
     res.json({ success: true, balance: newBalance, frozenAmount: newFrozen });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Multer storage setup for image uploads
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const dir = path.join(__dirname, '..', 'public', 'uploads');
+    if (!fs.existsSync(dir)){
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    cb(null, dir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname);
+    cb(null, 'file-' + uniqueSuffix + ext);
+  }
+});
+const multer = require('multer');
+const upload = multer({ storage: storage });
+
+// 27. Image Upload Endpoint
+router.post('/upload', authenticateAdmin, upload.single('image'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No image file provided' });
+    }
+    const fileUrl = `/uploads/${req.file.filename}`;
+    res.json({ success: true, url: fileUrl });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 28. Get System Settings
+router.get('/settings', authenticateAdmin, async (req, res) => {
+  try {
+    const settings = await db.getSettings();
+    res.json(settings);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 29. Update System Settings
+router.post('/settings', authenticateAdmin, async (req, res) => {
+  try {
+    const updates = {};
+    const allowedFields = ['minRecharge', 'minWithdrawal', 'commissionRate', 'maxTasksPerDay', 'upiId', 'qrCodeUrl'];
+    
+    allowedFields.forEach(field => {
+      if (req.body[field] !== undefined) {
+        if (field === 'minRecharge' || field === 'minWithdrawal' || field === 'commissionRate') {
+          updates[field] = parseFloat(req.body[field]);
+        } else if (field === 'maxTasksPerDay') {
+          updates[field] = parseInt(req.body[field]);
+        } else {
+          updates[field] = req.body[field];
+        }
+      }
+    });
+
+    const updated = await db.updateSettings(updates);
+    res.json({ success: true, settings: updated });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

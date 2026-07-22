@@ -10,6 +10,7 @@ import AdminWalletWithdrawals from './admin/AdminWalletWithdrawals';
 import AdminTasks from './admin/AdminTasks';
 import AdminProducts from './admin/AdminProducts';
 import AdminCustomers from './admin/AdminCustomers';
+import AdminPortalSettings from './admin/AdminPortalSettings';
 
 const AdminDashboard = () => {
   const { adminToken, logoutAdmin, addToast } = useAuth();
@@ -137,11 +138,17 @@ const AdminDashboard = () => {
             addToast={addToast} 
           />
         );
-      case 'Partners':
       case 'Portal Settings':
         return (
+          <AdminPortalSettings 
+            adminToken={adminToken} 
+            addToast={addToast} 
+          />
+        );
+      case 'Partners':
+        return (
           <div style={{ padding: '40px', color: '#6b7280', textAlign: 'center', fontSize: '14px' }}>
-            This section is placeholder and will be configured in future portal settings updates.
+            This section is placeholder and will be configured in future partners updates.
           </div>
         );
       default:
