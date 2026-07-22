@@ -592,6 +592,7 @@ router.post('/users/:id/release-frozen', authenticateAdmin, async (req, res) => 
 });
 
 // Multer storage setup for image uploads
+const multer = require('multer');
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     const dir = path.join(__dirname, '..', 'public', 'uploads');
@@ -606,7 +607,6 @@ const storage = multer.diskStorage({
     cb(null, 'file-' + uniqueSuffix + ext);
   }
 });
-const multer = require('multer');
 const upload = multer({ storage: storage });
 
 // 27. Image Upload Endpoint
