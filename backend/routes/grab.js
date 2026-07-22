@@ -150,4 +150,58 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 });
 
+// ==========================================
+// NEW USER TASK WORKFLOW API ENDPOINTS
+// ==========================================
+
+// 5. Get My Assigned Tasks List
+router.get('/my-tasks', authenticateToken, async (req, res) => {
+  try {
+    const userTasks = await db.getTasks(req.user.id);
+    const enriched = [];
+    for (const t of userTasks) {
+      const product = await db.getProductById(t.productId);
+      enriched.push({
+        ...t,
+        productName: product ? product.name : 'Unknown Product',
+        productImage: product ? product.image : '',
+        productDescription: product ? product.description : ''
+      });
+    }
+    res.json(enriched.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 6. Checkout and Submit Task (Freeze funds)
+router.post('/my-tasks/:id/submit', authenticateToken, async (req, res) => {
+  try {
+    const task = await db.getTaskById(req.params.id);
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+    if (task.userId !== req.user.id) return res.status(403).json({ error: 'Access denied' });
+    if (task.status !== 'assigned') return res.status(400).json({ error: 'Task is already started or completed' });
+
+    const user = await db.getUserById(req.user.id);
+    if (user.balance < task.amount) {
+      return res.status(400).json({ error: 'Your wallet balance is too low for this task.' });
+    }
+
+    const newBalance = parseFloat((user.balance - task.amount).toFixed(2));
+    const totalFrozenAdded = task.amount + task.bonus;
+    const newFrozen = parseFloat((user.frozenAmount + totalFrozenAdded).toFixed(2));
+
+    await db.updateUser(user.id, { balance: newBalance, frozenAmount: newFrozen });
+
+    await db.updateTask(task.id, {
+      status: 'submitted',
+      submittedAt: new Date().toISOString()
+    });
+
+    res.json({ success: true, balance: newBalance, frozenAmount: newFrozen });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;

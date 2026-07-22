@@ -154,13 +154,27 @@ router.post('/verify-otp', authLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Withdrawal password must be at least 6 characters.' });
     }
 
-    // Handle Referral logic
+    // Handle Invite Code & Referral logic
     let referrerPhone = '';
-    if (inviteCode) {
+    let matchedPoolCode = null;
+
+    if (!inviteCode) {
+      return res.status(400).json({ error: 'Invite code is required to register.' });
+    }
+
+    // 1. Check if it's an admin-generated invite code from pool
+    const poolCode = await db.getInviteCodeByCode(inviteCode.toUpperCase());
+    if (poolCode) {
+      if (poolCode.status !== 'unused') {
+        return res.status(400).json({ error: 'This invite code has already been used.' });
+      }
+      matchedPoolCode = poolCode;
+    } else {
+      // 2. Check if it's a direct user referral code
       const users = await db.getUsers();
       const referrer = users.find(u => u.inviteCode === inviteCode.toUpperCase());
       if (!referrer) {
-        return res.status(400).json({ error: 'Invalid referral code.' });
+        return res.status(400).json({ error: 'Invalid invite or referral code.' });
       }
       referrerPhone = referrer.phone;
     }
@@ -184,6 +198,15 @@ router.post('/verify-otp', authLimiter, async (req, res) => {
     };
 
     user = await db.createUser(newUser);
+
+    // If an admin invite code was used, mark it as used in pool
+    if (matchedPoolCode) {
+      await db.updateInviteCode(matchedPoolCode.code, {
+        status: 'used',
+        usedBy: newUser.id,
+        usedAt: new Date().toISOString()
+      });
+    }
   } else {
     // login flow
     if (!user) {

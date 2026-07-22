@@ -10,6 +10,9 @@ const Order = require('../models/Order');
 const UserGrab = require('../models/UserGrab');
 const Recharge = require('../models/Recharge');
 const Withdrawal = require('../models/Withdrawal');
+const Product = require('../models/Product');
+const Task = require('../models/Task');
+const InviteCode = require('../models/InviteCode');
 
 const dbPath = path.join(__dirname, '..', 'db.json');
 
@@ -18,7 +21,10 @@ const defaultDb = {
   orders: [],
   user_grabs: [],
   recharges: [],
-  withdrawals: []
+  withdrawals: [],
+  products: [],
+  tasks: [],
+  invite_codes: []
 };
 
 class DatabaseAdapter {
@@ -161,6 +167,48 @@ class DatabaseAdapter {
           ifsc VARCHAR(20) NOT NULL,
           status VARCHAR(20) DEFAULT 'pending',
           createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // 6. Products Table
+      await this.tidbPool.query(`
+        CREATE TABLE IF NOT EXISTS products (
+          id VARCHAR(50) PRIMARY KEY,
+          name VARCHAR(255) NOT NULL,
+          price DECIMAL(15, 2) NOT NULL,
+          bonus DECIMAL(15, 2) NOT NULL,
+          description TEXT,
+          image VARCHAR(500) NOT NULL,
+          isActive BOOLEAN DEFAULT TRUE,
+          createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // 7. Assigned Tasks Table
+      await this.tidbPool.query(`
+        CREATE TABLE IF NOT EXISTS tasks (
+          id VARCHAR(50) PRIMARY KEY,
+          userId VARCHAR(50) NOT NULL,
+          productId VARCHAR(50) NOT NULL,
+          amount DECIMAL(15, 2) NOT NULL,
+          bonus DECIMAL(15, 2) NOT NULL,
+          status VARCHAR(20) DEFAULT 'assigned',
+          createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+          expiresAt DATETIME,
+          submittedAt DATETIME
+        )
+      `);
+
+      // 8. Invite Codes Table
+      await this.tidbPool.query(`
+        CREATE TABLE IF NOT EXISTS invite_codes (
+          code VARCHAR(20) PRIMARY KEY,
+          note VARCHAR(255) DEFAULT '',
+          status VARCHAR(20) DEFAULT 'unused',
+          createdBy VARCHAR(50) DEFAULT 'admin',
+          usedBy VARCHAR(50),
+          createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+          usedAt DATETIME
         )
       `);
 
@@ -570,6 +618,255 @@ class DatabaseAdapter {
       return data.withdrawals[index];
     }
     return null;
+  }
+
+  // --- Products CRUD Operations ---
+  async getProducts() {
+    if (this.isTidbActive) {
+      const [rows] = await this.tidbPool.query('SELECT * FROM products');
+      return rows;
+    }
+    if (this.isMongoActive) {
+      return await Product.find().lean();
+    }
+    return this.readJson().products || [];
+  }
+
+  async getProductById(id) {
+    if (this.isTidbActive) {
+      const [rows] = await this.tidbPool.query('SELECT * FROM products WHERE id = ?', [id]);
+      return rows[0] || null;
+    }
+    if (this.isMongoActive) {
+      return await Product.findOne({ id }).lean();
+    }
+    return (this.readJson().products || []).find(p => p.id === id) || null;
+  }
+
+  async createProduct(product) {
+    if (this.isTidbActive) {
+      const { id, name, price, bonus, description, image, isActive, createdAt } = product;
+      await this.tidbPool.query(
+        'INSERT INTO products (id, name, price, bonus, description, image, isActive, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [id, name, price, bonus, description || '', image, isActive !== undefined ? isActive : true, createdAt ? new Date(createdAt) : new Date()]
+      );
+      return product;
+    }
+    if (this.isMongoActive) {
+      const newProd = new Product(product);
+      return await newProd.save();
+    }
+    const data = this.readJson();
+    if (!data.products) data.products = [];
+    data.products.push(product);
+    this.writeJson(data);
+    return product;
+  }
+
+  async updateProduct(id, updates) {
+    if (this.isTidbActive) {
+      const keys = Object.keys(updates);
+      if (keys.length === 0) return this.getProductById(id);
+      const sets = keys.map(k => `${k} = ?`).join(', ');
+      const values = Object.values(updates);
+      await this.tidbPool.query(`UPDATE products SET ${sets} WHERE id = ?`, [...values, id]);
+      return this.getProductById(id);
+    }
+    if (this.isMongoActive) {
+      return await Product.findOneAndUpdate({ id }, { $set: updates }, { new: true }).lean();
+    }
+    const data = this.readJson();
+    if (!data.products) data.products = [];
+    const index = data.products.findIndex(p => p.id === id);
+    if (index !== -1) {
+      data.products[index] = { ...data.products[index], ...updates };
+      this.writeJson(data);
+      return data.products[index];
+    }
+    return null;
+  }
+
+  async deleteProduct(id) {
+    if (this.isTidbActive) {
+      await this.tidbPool.query('DELETE FROM products WHERE id = ?', [id]);
+      return true;
+    }
+    if (this.isMongoActive) {
+      await Product.findOneAndDelete({ id });
+      return true;
+    }
+    const data = this.readJson();
+    if (!data.products) data.products = [];
+    const index = data.products.findIndex(p => p.id === id);
+    if (index !== -1) {
+      data.products.splice(index, 1);
+      this.writeJson(data);
+      return true;
+    }
+    return false;
+  }
+
+  // --- Tasks CRUD Operations ---
+  async getTasks(userId = null) {
+    if (this.isTidbActive) {
+      let q = 'SELECT * FROM tasks';
+      let params = [];
+      if (userId) {
+        q += ' WHERE userId = ?';
+        params.push(userId);
+      }
+      const [rows] = await this.tidbPool.query(q, params);
+      return rows;
+    }
+    if (this.isMongoActive) {
+      const query = userId ? { userId } : {};
+      return await Task.find(query).lean();
+    }
+    const tasks = this.readJson().tasks || [];
+    if (userId) {
+      return tasks.filter(t => t.userId === userId);
+    }
+    return tasks;
+  }
+
+  async getTaskById(id) {
+    if (this.isTidbActive) {
+      const [rows] = await this.tidbPool.query('SELECT * FROM tasks WHERE id = ?', [id]);
+      return rows[0] || null;
+    }
+    if (this.isMongoActive) {
+      return await Task.findOne({ id }).lean();
+    }
+    return (this.readJson().tasks || []).find(t => t.id === id) || null;
+  }
+
+  async createTask(task) {
+    if (this.isTidbActive) {
+      const { id, userId, productId, amount, bonus, status, createdAt, expiresAt, submittedAt } = task;
+      await this.tidbPool.query(
+        'INSERT INTO tasks (id, userId, productId, amount, bonus, status, createdAt, expiresAt, submittedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [id, userId, productId, amount, bonus, status || 'assigned', createdAt ? new Date(createdAt) : new Date(), expiresAt ? new Date(expiresAt) : null, submittedAt ? new Date(submittedAt) : null]
+      );
+      return task;
+    }
+    if (this.isMongoActive) {
+      const newTask = new Task(task);
+      return await newTask.save();
+    }
+    const data = this.readJson();
+    if (!data.tasks) data.tasks = [];
+    data.tasks.push(task);
+    this.writeJson(data);
+    return task;
+  }
+
+  async updateTask(id, updates) {
+    if (this.isTidbActive) {
+      const keys = Object.keys(updates);
+      if (keys.length === 0) return this.getTaskById(id);
+      const sets = keys.map(k => `${k} = ?`).join(', ');
+      const values = Object.values(updates);
+      await this.tidbPool.query(`UPDATE tasks SET ${sets} WHERE id = ?`, [...values, id]);
+      return this.getTaskById(id);
+    }
+    if (this.isMongoActive) {
+      return await Task.findOneAndUpdate({ id }, { $set: updates }, { new: true }).lean();
+    }
+    const data = this.readJson();
+    if (!data.tasks) data.tasks = [];
+    const index = data.tasks.findIndex(t => t.id === id);
+    if (index !== -1) {
+      data.tasks[index] = { ...data.tasks[index], ...updates };
+      this.writeJson(data);
+      return data.tasks[index];
+    }
+    return null;
+  }
+
+  // --- Invite Codes CRUD Operations ---
+  async getInviteCodes() {
+    if (this.isTidbActive) {
+      const [rows] = await this.tidbPool.query('SELECT * FROM invite_codes');
+      return rows;
+    }
+    if (this.isMongoActive) {
+      return await InviteCode.find().lean();
+    }
+    return this.readJson().invite_codes || [];
+  }
+
+  async getInviteCodeByCode(code) {
+    if (this.isTidbActive) {
+      const [rows] = await this.tidbPool.query('SELECT * FROM invite_codes WHERE code = ?', [code]);
+      return rows[0] || null;
+    }
+    if (this.isMongoActive) {
+      return await InviteCode.findOne({ code }).lean();
+    }
+    return (this.readJson().invite_codes || []).find(ic => ic.code === code) || null;
+  }
+
+  async createInviteCode(inviteCode) {
+    if (this.isTidbActive) {
+      const { code, note, status, createdBy, usedBy, createdAt, usedAt } = inviteCode;
+      await this.tidbPool.query(
+        'INSERT INTO invite_codes (code, note, status, createdBy, usedBy, createdAt, usedAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [code, note || '', status || 'unused', createdBy || 'admin', usedBy || null, createdAt ? new Date(createdAt) : new Date(), usedAt ? new Date(usedAt) : null]
+      );
+      return inviteCode;
+    }
+    if (this.isMongoActive) {
+      const newCode = new InviteCode(inviteCode);
+      return await newCode.save();
+    }
+    const data = this.readJson();
+    if (!data.invite_codes) data.invite_codes = [];
+    data.invite_codes.push(inviteCode);
+    this.writeJson(data);
+    return inviteCode;
+  }
+
+  async updateInviteCode(code, updates) {
+    if (this.isTidbActive) {
+      const keys = Object.keys(updates);
+      if (keys.length === 0) return this.getInviteCodeByCode(code);
+      const sets = keys.map(k => `${k} = ?`).join(', ');
+      const values = Object.values(updates);
+      await this.tidbPool.query(`UPDATE invite_codes SET ${sets} WHERE code = ?`, [...values, code]);
+      return this.getInviteCodeByCode(code);
+    }
+    if (this.isMongoActive) {
+      return await InviteCode.findOneAndUpdate({ code }, { $set: updates }, { new: true }).lean();
+    }
+    const data = this.readJson();
+    if (!data.invite_codes) data.invite_codes = [];
+    const index = data.invite_codes.findIndex(ic => ic.code === code);
+    if (index !== -1) {
+      data.invite_codes[index] = { ...data.invite_codes[index], ...updates };
+      this.writeJson(data);
+      return data.invite_codes[index];
+    }
+    return null;
+  }
+
+  async deleteInviteCode(code) {
+    if (this.isTidbActive) {
+      await this.tidbPool.query('DELETE FROM invite_codes WHERE code = ?', [code]);
+      return true;
+    }
+    if (this.isMongoActive) {
+      await InviteCode.findOneAndDelete({ code });
+      return true;
+    }
+    const data = this.readJson();
+    if (!data.invite_codes) data.invite_codes = [];
+    const index = data.invite_codes.findIndex(ic => ic.code === code);
+    if (index !== -1) {
+      data.invite_codes.splice(index, 1);
+      this.writeJson(data);
+      return true;
+    }
+    return false;
   }
 
   // --- Redis / In-Memory Cache Operations for OTP and Rate Limiting ---

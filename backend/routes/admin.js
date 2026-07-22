@@ -345,4 +345,248 @@ router.post('/grabs/:id/reject', authenticateAdmin, async (req, res) => {
   }
 });
 
+// ==========================================
+// NEW ADMIN DESKTOP PORTAL API ENDPOINTS
+// ==========================================
+
+// 16. List Invite Codes
+router.get('/invite-codes', authenticateAdmin, async (req, res) => {
+  try {
+    const codes = await db.getInviteCodes();
+    res.json(codes);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 17. Generate Invite Codes
+router.post('/invite-codes/generate', authenticateAdmin, async (req, res) => {
+  try {
+    const { note, quantity } = req.body;
+    const qty = parseInt(quantity) || 1;
+    const generated = [];
+
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    for (let i = 0; i < qty; i++) {
+      let code = '';
+      let isUnique = false;
+      let limit = 0;
+      while (!isUnique && limit < 50) {
+        code = '';
+        for (let j = 0; j < 8; j++) {
+          code += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        const existing = await db.getInviteCodeByCode(code);
+        if (!existing) isUnique = true;
+        limit++;
+      }
+
+      const inviteObj = {
+        code,
+        note: note || '',
+        status: 'unused',
+        createdBy: 'admin',
+        createdAt: new Date().toISOString()
+      };
+
+      await db.createInviteCode(inviteObj);
+      generated.push(inviteObj);
+    }
+
+    res.json({ success: true, count: generated.length, codes: generated });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 18. Delete Invite Code
+router.delete('/invite-codes/:code', authenticateAdmin, async (req, res) => {
+  try {
+    const success = await db.deleteInviteCode(req.params.code);
+    res.json({ success });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 19. List Products Catalog
+router.get('/products', authenticateAdmin, async (req, res) => {
+  try {
+    const products = await db.getProducts();
+    res.json(products);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 20. Create Product
+router.post('/products', authenticateAdmin, async (req, res) => {
+  try {
+    const { name, price, bonus, description, image } = req.body;
+    const numericPrice = parseFloat(price);
+    const numericBonus = parseFloat(bonus);
+
+    if (!name || isNaN(numericPrice) || isNaN(numericBonus) || !image) {
+      return res.status(400).json({ error: 'Name, price, bonus, and image are required' });
+    }
+
+    const productObj = {
+      id: uuidv4(),
+      name,
+      price: numericPrice,
+      bonus: numericBonus,
+      description: description || '',
+      image,
+      isActive: true,
+      createdAt: new Date().toISOString()
+    };
+
+    await db.createProduct(productObj);
+    res.json(productObj);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 21. Update Product details
+router.post('/products/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const updates = {};
+    const allowedFields = ['name', 'price', 'bonus', 'description', 'image', 'isActive'];
+    
+    allowedFields.forEach(field => {
+      if (req.body[field] !== undefined) {
+        if (field === 'price' || field === 'bonus') {
+          updates[field] = parseFloat(req.body[field]);
+        } else if (field === 'isActive') {
+          updates[field] = req.body[field] === true || req.body[field] === 'true' || req.body[field] === 1;
+        } else {
+          updates[field] = req.body[field];
+        }
+      }
+    });
+
+    const updated = await db.updateProduct(req.params.id, updates);
+    res.json(updated);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 22. List All Assigned Tasks
+router.get('/tasks', authenticateAdmin, async (req, res) => {
+  try {
+    const tasks = await db.getTasks();
+    const enrichedTasks = [];
+    for (const t of tasks) {
+      const user = await db.getUserById(t.userId);
+      const product = await db.getProductById(t.productId);
+      enrichedTasks.push({
+        ...t,
+        userPhone: user ? user.phone : 'Unknown',
+        productName: product ? product.name : 'Unknown Product',
+        productImage: product ? product.image : ''
+      });
+    }
+    res.json(enrichedTasks);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 23. Assign Task to Customer
+router.post('/tasks/assign', authenticateAdmin, async (req, res) => {
+  try {
+    const { userId, productId, amount, bonus } = req.body;
+    const user = await db.getUserById(userId);
+    if (!user) return res.status(404).json({ error: 'Customer not found' });
+
+    const product = await db.getProductById(productId);
+    if (!product) return res.status(404).json({ error: 'Product not found' });
+
+    const finalPrice = parseFloat(amount) || product.price;
+    const finalBonus = parseFloat(bonus) || product.bonus;
+
+    const taskObj = {
+      id: uuidv4(),
+      userId: user.id,
+      productId: product.id,
+      amount: finalPrice,
+      bonus: finalBonus,
+      status: 'assigned',
+      createdAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString()
+    };
+
+    await db.createTask(taskObj);
+    res.json({ success: true, task: taskObj });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 24. Approve Assigned Task (Timer stops, reward remains frozen)
+router.post('/tasks/:id/approve', authenticateAdmin, async (req, res) => {
+  try {
+    const task = await db.getTaskById(req.params.id);
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+    if (task.status !== 'submitted') return res.status(400).json({ error: 'Task is not submitted for approval' });
+
+    await db.updateTask(task.id, { status: 'completed' });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 25. Reject Assigned Task (Refund principal to available, clear frozen)
+router.post('/tasks/:id/reject', authenticateAdmin, async (req, res) => {
+  try {
+    const task = await db.getTaskById(req.params.id);
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+    if (task.status !== 'submitted') return res.status(400).json({ error: 'Task is not submitted' });
+
+    const user = await db.getUserById(task.userId);
+    if (user) {
+      const refundAmount = task.amount;
+      const newBalance = parseFloat((user.balance + refundAmount).toFixed(2));
+      const totalFrozenAdded = task.amount + task.bonus;
+      const newFrozen = Math.max(0, parseFloat((user.frozenAmount - totalFrozenAdded).toFixed(2)));
+      await db.updateUser(user.id, { balance: newBalance, frozenAmount: newFrozen });
+    }
+
+    await db.updateTask(task.id, { status: 'rejected' });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 26. Transfer to Wallet (Release Frozen funds to available)
+router.post('/users/:id/release-frozen', authenticateAdmin, async (req, res) => {
+  try {
+    const { amount } = req.body;
+    const user = await db.getUserById(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const releaseAmount = parseFloat(amount);
+    if (isNaN(releaseAmount) || releaseAmount <= 0) {
+      return res.status(400).json({ error: 'Invalid release amount' });
+    }
+
+    if (user.frozenAmount < releaseAmount) {
+      return res.status(400).json({ error: 'Release amount exceeds frozen balance' });
+    }
+
+    const newFrozen = parseFloat((user.frozenAmount - releaseAmount).toFixed(2));
+    const newBalance = parseFloat((user.balance + releaseAmount).toFixed(2));
+    const todayEarnings = parseFloat((user.todayEarnings + releaseAmount - (releaseAmount / 1.2)).toFixed(2));
+
+    await db.updateUser(user.id, { balance: newBalance, frozenAmount: newFrozen, todayEarnings });
+    res.json({ success: true, balance: newBalance, frozenAmount: newFrozen });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;
