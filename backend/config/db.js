@@ -758,18 +758,17 @@ class DatabaseAdapter {
         q += ' WHERE userId = ?';
         params.push(userId);
       }
+      q += ' ORDER BY createdAt DESC';
       const [rows] = await this.tidbPool.query(q, params);
       return rows;
     }
     if (this.isMongoActive) {
       const query = userId ? { userId } : {};
-      return await Task.find(query).lean();
+      return await Task.find(query).sort({ createdAt: -1 }).lean();
     }
     const tasks = this.readJson().tasks || [];
-    if (userId) {
-      return tasks.filter(t => t.userId === userId);
-    }
-    return tasks;
+    const filtered = userId ? tasks.filter(t => t.userId === userId) : tasks;
+    return [...filtered].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   }
 
   async getTaskById(id) {

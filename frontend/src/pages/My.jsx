@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../App';
-import { User, Clipboard, CreditCard, Landmark, ListOrdered, Users, LogOut, History, CheckCircle2 } from 'lucide-react';
+import { User, Clipboard, CreditCard, Landmark, ListOrdered, Users, LogOut, History, CheckCircle2, AlertCircle } from 'lucide-react';
 
 const My = () => {
   const { user, logout, refreshUser, addToast } = useAuth();
@@ -322,9 +322,27 @@ const My = () => {
       {showWithdrawModal && (
         <div className="modal-overlay">
           <div className="modal-content" style={{ width: '92%', maxWidth: '360px' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: '800', textAlign: 'center', marginBottom: '16px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: '800', textAlign: 'center', marginBottom: '12px' }}>
               Withdraw Payout
             </h3>
+
+            {/* Warning Policy Alert Banner */}
+            <div style={{
+              background: 'rgba(239, 68, 68, 0.05)',
+              border: '1px solid rgba(239, 68, 68, 0.15)',
+              borderRadius: '8px',
+              padding: '10px 12px',
+              fontSize: '11px',
+              color: 'var(--danger)',
+              lineHeight: '1.4',
+              marginBottom: '4px',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '8px'
+            }}>
+              <AlertCircle size={16} style={{ flexShrink: 0, marginTop: '1px' }} />
+              <span><strong>Notice:</strong> You must complete a minimum of 5 tasks to eligible for withdrawals.</span>
+            </div>
 
             <form onSubmit={handleWithdrawSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               

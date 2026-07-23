@@ -199,8 +199,8 @@ const Orders = () => {
             </div>
           )}
 
-          {/* Bottom Actions footer */}
-          <div style={{ marginTop: 'auto', paddingTop: '20px' }}>
+          {/* Action Buttons: Rendered directly below balance/alerts */}
+          <div style={{ marginTop: '8px' }}>
             {isBalanceLow ? (
               <button
                 onClick={() => navigate('/chongzhi')}
