@@ -475,9 +475,16 @@ const AdminTasks = ({ tasksList = [], usersList = [], fetchAllData, adminToken, 
                     }}
                   >
                     <option value="">Select customer...</option>
-                    {usersList.map(u => (
-                      <option key={u.id} value={u.id}>{u.phone} (UID: {u.uid})</option>
-                    ))}
+                    {[...usersList]
+                      .sort((a, b) => {
+                        const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
+                        const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
+                        return dateB - dateA;
+                      })
+                      .map(u => (
+                        <option key={u.id} value={u.id}>{u.phone} (UID: {u.uid})</option>
+                      ))
+                    }
                   </select>
                 </div>
 

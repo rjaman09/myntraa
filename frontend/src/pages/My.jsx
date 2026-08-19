@@ -11,6 +11,8 @@ const My = () => {
   const [showTeamModal, setShowTeamModal] = useState(false);
   
   const [amount, setAmount] = useState('');
+  const [withdrawMode, setWithdrawMode] = useState('bank'); // 'bank' | 'upi'
+  const [upiId, setUpiId] = useState('');
   const [bankAccount, setBankAccount] = useState('');
   const [bankName, setBankName] = useState('');
   const [holderName, setHolderName] = useState('');
@@ -103,9 +105,16 @@ const My = () => {
       addToast('Insufficient balance!', 'error');
       return;
     }
-    if (!bankAccount || !bankName || !holderName || !ifsc) {
-      addToast('Please fill in all bank details', 'error');
-      return;
+    if (withdrawMode === 'bank') {
+      if (!bankAccount || !bankName || !holderName || !ifsc) {
+        addToast('Please fill in all bank details', 'error');
+        return;
+      }
+    } else {
+      if (!upiId || !holderName) {
+        addToast('Please fill in UPI ID and Account Holder Name', 'error');
+        return;
+      }
     }
     if (!withdrawalPassword) {
       addToast('Please enter your withdrawal password', 'error');
@@ -115,20 +124,26 @@ const My = () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
+      const payload = {
+        amount: withdrawAmt,
+        holderName,
+        withdrawalPassword
+      };
+      if (withdrawMode === 'bank') {
+        payload.bankAccount = bankAccount;
+        payload.bankName = bankName;
+        payload.ifsc = ifsc;
+      } else {
+        payload.upiId = upiId;
+      }
+
       const response = await fetch('/api/withdraw', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          amount: withdrawAmt,
-          bankAccount,
-          bankName,
-          holderName,
-          ifsc,
-          withdrawalPassword
-        })
+        body: JSON.stringify(payload)
       });
 
       const data = await response.json();
@@ -139,6 +154,10 @@ const My = () => {
         setShowWithdrawModal(false);
         setAmount('');
         setWithdrawalPassword('');
+        setUpiId('');
+        setBankAccount('');
+        setBankName('');
+        setIfsc('');
         refreshUser();
         fetchWithdrawals();
       }
@@ -363,57 +382,136 @@ const My = () => {
                 </span>
               </div>
 
-              <div className="form-input-group" style={{ marginBottom: 0 }}>
-                <label>Bank Account Number</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  style={{ paddingLeft: '16px' }}
-                  placeholder="Enter account number"
-                  value={bankAccount}
-                  onChange={(e) => setBankAccount(e.target.value)}
-                  required
-                />
+              {/* Payment Mode Toggle Tabs */}
+              <div style={{
+                display: 'flex',
+                background: 'rgba(255, 255, 255, 0.05)',
+                padding: '4px',
+                borderRadius: '8px',
+                border: '1px solid var(--border)',
+                marginBottom: '4px'
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setWithdrawMode('bank')}
+                  style={{
+                    flex: 1,
+                    padding: '8px',
+                    borderRadius: '6px',
+                    background: withdrawMode === 'bank' ? 'var(--primary)' : 'transparent',
+                    border: 'none',
+                    color: 'white',
+                    fontSize: '12px',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  Bank Transfer
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWithdrawMode('upi')}
+                  style={{
+                    flex: 1,
+                    padding: '8px',
+                    borderRadius: '6px',
+                    background: withdrawMode === 'upi' ? 'var(--primary)' : 'transparent',
+                    border: 'none',
+                    color: 'white',
+                    fontSize: '12px',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  UPI Payout
+                </button>
               </div>
 
-              <div className="form-input-group" style={{ marginBottom: 0 }}>
-                <label>Bank Name</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  style={{ paddingLeft: '16px' }}
-                  placeholder="e.g. State Bank of India"
-                  value={bankName}
-                  onChange={(e) => setBankName(e.target.value)}
-                  required
-                />
-              </div>
+              {withdrawMode === 'bank' ? (
+                <>
+                  <div className="form-input-group" style={{ marginBottom: 0 }}>
+                    <label>Bank Account Number</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      style={{ paddingLeft: '16px' }}
+                      placeholder="Enter account number"
+                      value={bankAccount}
+                      onChange={(e) => setBankAccount(e.target.value)}
+                      required={withdrawMode === 'bank'}
+                    />
+                  </div>
 
-              <div className="form-input-group" style={{ marginBottom: 0 }}>
-                <label>Account Holder Name</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  style={{ paddingLeft: '16px' }}
-                  placeholder="Enter name"
-                  value={holderName}
-                  onChange={(e) => setHolderName(e.target.value)}
-                  required
-                />
-              </div>
+                  <div className="form-input-group" style={{ marginBottom: 0 }}>
+                    <label>Bank Name</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      style={{ paddingLeft: '16px' }}
+                      placeholder="e.g. State Bank of India"
+                      value={bankName}
+                      onChange={(e) => setBankName(e.target.value)}
+                      required={withdrawMode === 'bank'}
+                    />
+                  </div>
 
-              <div className="form-input-group" style={{ marginBottom: '6px' }}>
-                <label>IFSC Code</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  style={{ paddingLeft: '16px' }}
-                  placeholder="e.g. SBIN0001234"
-                  value={ifsc}
-                  onChange={(e) => setIfsc(e.target.value.toUpperCase())}
-                  required
-                />
-              </div>
+                  <div className="form-input-group" style={{ marginBottom: 0 }}>
+                    <label>Account Holder Name</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      style={{ paddingLeft: '16px' }}
+                      placeholder="Enter name"
+                      value={holderName}
+                      onChange={(e) => setHolderName(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <div className="form-input-group" style={{ marginBottom: '6px' }}>
+                    <label>IFSC Code</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      style={{ paddingLeft: '16px' }}
+                      placeholder="e.g. SBIN0001234"
+                      value={ifsc}
+                      onChange={(e) => setIfsc(e.target.value.toUpperCase())}
+                      required={withdrawMode === 'bank'}
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="form-input-group" style={{ marginBottom: 0 }}>
+                    <label>UPI ID</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      style={{ paddingLeft: '16px' }}
+                      placeholder="e.g. name@upi"
+                      value={upiId}
+                      onChange={(e) => setUpiId(e.target.value)}
+                      required={withdrawMode === 'upi'}
+                    />
+                  </div>
+
+                  <div className="form-input-group" style={{ marginBottom: 0 }}>
+                    <label>Account Holder Name</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      style={{ paddingLeft: '16px' }}
+                      placeholder="Enter name"
+                      value={holderName}
+                      onChange={(e) => setHolderName(e.target.value)}
+                      required
+                    />
+                  </div>
+                </>
+              )}
 
               <div className="form-input-group" style={{ marginBottom: '12px' }}>
                 <label>Withdrawal Password</label>
@@ -512,7 +610,11 @@ const My = () => {
                         ₹ {record.amount.toFixed(2)}
                       </div>
                       <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                        Bank: {record.bankName} ({record.bankAccount.slice(-4).padStart(record.bankAccount.length, '*')})
+                        {record.upiId ? (
+                          <span>UPI Payout: {record.upiId}</span>
+                        ) : (
+                          <span>Bank: {record.bankName} ({record.bankAccount.slice(-4).padStart(record.bankAccount.length, '*')})</span>
+                        )}
                       </div>
                       <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
                         {new Date(record.createdAt).toLocaleString()}

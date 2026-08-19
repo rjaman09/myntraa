@@ -80,15 +80,21 @@ const AdminInviteCodes = ({ inviteCodes = [], fetchAllData, adminToken, addToast
     setTimeout(() => setCopiedCode(null), 2000);
   };
 
-  // Filter list
-  const filteredCodes = inviteCodes.filter(item => {
-    const codeMatch = item.code.toLowerCase().includes(search.toLowerCase()) || 
-                      item.note.toLowerCase().includes(search.toLowerCase()) || 
-                      (item.usedBy && item.usedBy.toLowerCase().includes(search.toLowerCase()));
-    const statusMatch = statusFilter === 'all' || item.status === statusFilter;
-    const creatorMatch = creatorFilter === 'all' || item.createdBy === creatorFilter;
-    return codeMatch && statusMatch && creatorMatch;
-  });
+  // Filter and sort list (Sorted by creation date/time descending so newest show first)
+  const filteredCodes = inviteCodes
+    .filter(item => {
+      const codeMatch = item.code.toLowerCase().includes(search.toLowerCase()) || 
+                        item.note.toLowerCase().includes(search.toLowerCase()) || 
+                        (item.usedBy && item.usedBy.toLowerCase().includes(search.toLowerCase()));
+      const statusMatch = statusFilter === 'all' || item.status === statusFilter;
+      const creatorMatch = creatorFilter === 'all' || item.createdBy === creatorFilter;
+      return codeMatch && statusMatch && creatorMatch;
+    })
+    .sort((a, b) => {
+      const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
+      const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
+      return dateB - dateA;
+    });
 
   return (
     <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '24px' }}>

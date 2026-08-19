@@ -173,14 +173,31 @@ class DatabaseAdapter {
           id VARCHAR(50) PRIMARY KEY,
           userId VARCHAR(50) NOT NULL,
           amount DECIMAL(15, 2) NOT NULL,
-          bankAccount VARCHAR(100) NOT NULL,
-          bankName VARCHAR(100) NOT NULL,
+          bankAccount VARCHAR(100) DEFAULT '',
+          bankName VARCHAR(100) DEFAULT '',
           holderName VARCHAR(100) NOT NULL,
-          ifsc VARCHAR(20) NOT NULL,
+          ifsc VARCHAR(20) DEFAULT '',
+          upiId VARCHAR(100) DEFAULT '',
           status VARCHAR(20) DEFAULT 'pending',
           createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
         )
       `);
+
+      // Migration: Ensure upiId exists and bank account columns allow empty values
+      try {
+        await this.tidbPool.query("ALTER TABLE withdrawals ADD COLUMN upiId VARCHAR(100) DEFAULT ''");
+      } catch (e) {
+        // Ignored if column already exists
+      }
+      try {
+        await this.tidbPool.query("ALTER TABLE withdrawals MODIFY COLUMN bankAccount VARCHAR(100) DEFAULT ''");
+      } catch (e) {}
+      try {
+        await this.tidbPool.query("ALTER TABLE withdrawals MODIFY COLUMN bankName VARCHAR(100) DEFAULT ''");
+      } catch (e) {}
+      try {
+        await this.tidbPool.query("ALTER TABLE withdrawals MODIFY COLUMN ifsc VARCHAR(20) DEFAULT ''");
+      } catch (e) {}
 
       // 6. Products Table
       await this.tidbPool.query(`
@@ -623,10 +640,10 @@ class DatabaseAdapter {
 
   async createWithdrawal(withdrawal) {
     if (this.isTidbActive) {
-      const { id, userId, amount, bankAccount, bankName, holderName, ifsc, status, createdAt } = withdrawal;
+      const { id, userId, amount, bankAccount, bankName, holderName, ifsc, upiId, status, createdAt } = withdrawal;
       await this.tidbPool.query(
-        'INSERT INTO withdrawals (id, userId, amount, bankAccount, bankName, holderName, ifsc, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [id, userId, amount, bankAccount, bankName, holderName, ifsc, status, createdAt ? new Date(createdAt) : new Date()]
+        'INSERT INTO withdrawals (id, userId, amount, bankAccount, bankName, holderName, ifsc, upiId, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [id, userId, amount, bankAccount || '', bankName || '', holderName, ifsc || '', upiId || '', status, createdAt ? new Date(createdAt) : new Date()]
       );
       return withdrawal;
     }

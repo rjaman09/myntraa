@@ -51,7 +51,7 @@ router.get('/recharges', authenticateToken, async (req, res) => {
 // 3. Submit Withdrawal Request
 router.post('/withdraw', authenticateToken, async (req, res) => {
   try {
-    const { amount, bankAccount, bankName, holderName, ifsc, withdrawalPassword } = req.body;
+    const { amount, bankAccount, bankName, holderName, ifsc, upiId, withdrawalPassword } = req.body;
     const user = await db.getUserById(req.user.id);
 
     if (!user) return res.status(404).json({ error: 'User not found' });
@@ -72,8 +72,15 @@ router.post('/withdraw', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Insufficient balance' });
     }
 
-    if (!bankAccount || !bankName || !holderName || !ifsc) {
-      return res.status(400).json({ error: 'All bank details are required' });
+    // Check payment mode details: either UPI ID or bank account details are required
+    if (upiId) {
+      if (!holderName) {
+        return res.status(400).json({ error: 'Account holder name is required' });
+      }
+    } else {
+      if (!bankAccount || !bankName || !holderName || !ifsc) {
+        return res.status(400).json({ error: 'All bank details or UPI ID are required' });
+      }
     }
 
     // Freeze withdrawal funds
@@ -86,10 +93,11 @@ router.post('/withdraw', authenticateToken, async (req, res) => {
       id: uuidv4(),
       userId: req.user.id,
       amount: parseFloat(amount),
-      bankAccount,
-      bankName,
+      bankAccount: bankAccount || '',
+      bankName: bankName || '',
       holderName,
-      ifsc,
+      ifsc: ifsc || '',
+      upiId: upiId || '',
       status: 'pending',
       createdAt: new Date().toISOString()
     };

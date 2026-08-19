@@ -153,12 +153,18 @@ const AdminCustomers = ({ usersList = [], fetchAllData, adminToken, addToast }) 
     .filter(t => t.status === 'completed')
     .reduce((sum, t) => sum + parseFloat(t.amount || 0) + parseFloat(t.bonus || 0), 0);
 
-  // Filters
-  const filteredUsers = usersList.filter(item => {
-    const searchLower = search.toLowerCase();
-    return item.phone?.toLowerCase().includes(searchLower) || 
-           item.uid?.toLowerCase().includes(searchLower);
-  });
+  // Filters (Sorted by registration date/time descending so newest show first)
+  const filteredUsers = usersList
+    .filter(item => {
+      const searchLower = search.toLowerCase();
+      return item.phone?.toLowerCase().includes(searchLower) || 
+             item.uid?.toLowerCase().includes(searchLower);
+    })
+    .sort((a, b) => {
+      const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
+      const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
+      return dateB - dateA;
+    });
 
   const totalCustomers = usersList.length;
   const customersWithBalance = usersList.filter(u => parseFloat(u.balance) > 0).length;

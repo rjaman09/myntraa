@@ -41,7 +41,8 @@ const AdminWalletWithdrawals = ({ withdrawalsList = [], fetchAllData, adminToken
                           item.bankName?.toLowerCase().includes(searchLower) || 
                           item.bankAccount?.toLowerCase().includes(searchLower) || 
                           item.ifsc?.toLowerCase().includes(searchLower) ||
-                          item.holderName?.toLowerCase().includes(searchLower);
+                          item.holderName?.toLowerCase().includes(searchLower) ||
+                          item.upiId?.toLowerCase().includes(searchLower);
     const statusMatch = statusFilter === 'all' || item.status === statusFilter;
     return customerMatch && statusMatch;
   });
@@ -194,16 +195,32 @@ const AdminWalletWithdrawals = ({ withdrawalsList = [], fetchAllData, adminToken
                       ₹ {parseFloat(item.amount).toFixed(2)}
                     </td>
                     <td style={{ padding: '14px 16px' }}>
-                      <div style={{ fontWeight: '700', color: 'white', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <Building2 size={12} style={{ color: '#9ca3af' }} />
-                        {item.bankName}
-                      </div>
-                      <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '3px' }}>
-                        Acc: {item.bankAccount}
-                      </div>
-                      <div style={{ fontSize: '10px', color: '#6b7280', marginTop: '2px' }}>
-                        Name: {item.holderName} • IFSC: {item.ifsc}
-                      </div>
+                      {item.upiId ? (
+                        <>
+                          <div style={{ fontWeight: '700', color: '#60a5fa', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            UPI Payout
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '3px' }}>
+                            ID: {item.upiId}
+                          </div>
+                          <div style={{ fontSize: '10px', color: '#6b7280', marginTop: '2px' }}>
+                            Name: {item.holderName}
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div style={{ fontWeight: '700', color: 'white', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <Building2 size={12} style={{ color: '#9ca3af' }} />
+                            {item.bankName}
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '3px' }}>
+                            Acc: {item.bankAccount}
+                          </div>
+                          <div style={{ fontSize: '10px', color: '#6b7280', marginTop: '2px' }}>
+                            Name: {item.holderName} • IFSC: {item.ifsc}
+                          </div>
+                        </>
+                      )}
                     </td>
                     <td style={{ padding: '14px 16px', fontFamily: 'monospace', color: '#9ca3af' }}>
                       {item.upiId || '—'}
