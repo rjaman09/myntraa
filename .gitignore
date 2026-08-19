@@ -10,7 +10,6 @@ db.json
 
 # Production builds
 frontend/dist/
-backend/public/
 
 # Logs and system files
 logs
